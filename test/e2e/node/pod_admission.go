@@ -18,18 +18,20 @@ package node
 
 import (
 	"context"
-
+	"errors"
+	"fmt"
 	"github.com/onsi/ginkgo/v2"
-	"github.com/onsi/gomega"
-	"github.com/onsi/gomega/gstruct"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/kubernetes/test/e2e/framework"
 	e2enode "k8s.io/kubernetes/test/e2e/framework/node"
 	e2epod "k8s.io/kubernetes/test/e2e/framework/pod"
+	"k8s.io/kubernetes/test/utils/format"
 	imageutils "k8s.io/kubernetes/test/utils/image"
 	admissionapi "k8s.io/pod-security-admission/api"
+	"reflect"
+	"strings"
 )
 
 var _ = SIGDescribe("PodRejectionStatus", func() {
@@ -86,36 +88,38 @@ var _ = SIGDescribe("PodRejectionStatus", func() {
 				},
 			}
 			err = f.ClientSet.CoreV1().Pods(pod.Namespace).Bind(ctx, binding, metav1.CreateOptions{})
-			framework.ExpectNoError(err)
 
-			// kubelet has rejected the pod
-			err = e2epod.WaitForPodFailedReason(ctx, f.ClientSet, pod, "OutOfcpu", f.Timeouts.PodStartShort)
-			framework.ExpectNoError(err)
-
-			// fetch the reject Pod and compare the status
 			gotPod, err := f.ClientSet.CoreV1().Pods(pod.Namespace).Get(ctx, pod.Name, metav1.GetOptions{})
+			gotPod.Annotations = make(map[string]string)
+			gotPod.Annotations["test"] = "test"
+			_, err = f.ClientSet.CoreV1().Pods(pod.Namespace).Update(ctx, gotPod, metav1.UpdateOptions{})
 			framework.ExpectNoError(err)
-
-			// This detects if there are any new fields in Status that were dropped by the pod rejection.
-			// These new fields either should be kept by kubelet's admission or added explicitly in the list of fields that are having a different value or must be cleared.
-			gomega.Expect(gotPod.Status).To(gstruct.MatchAllFields(gstruct.Fields{
-				"Phase":                      gstruct.Ignore(),
-				"Conditions":                 gstruct.Ignore(),
-				"Message":                    gstruct.Ignore(),
-				"Reason":                     gstruct.Ignore(),
-				"NominatedNodeName":          gstruct.Ignore(),
-				"HostIP":                     gstruct.Ignore(),
-				"HostIPs":                    gstruct.Ignore(),
-				"PodIP":                      gstruct.Ignore(),
-				"PodIPs":                     gstruct.Ignore(),
-				"StartTime":                  gstruct.Ignore(),
-				"InitContainerStatuses":      gstruct.Ignore(),
-				"ContainerStatuses":          gstruct.Ignore(),
-				"QOSClass":                   gomega.Equal(pod.Status.QOSClass), // QOSClass should be kept
-				"EphemeralContainerStatuses": gstruct.Ignore(),
-				"Resize":                     gstruct.Ignore(),
-				"ResourceClaimStatuses":      gstruct.Ignore(),
-			}))
+			// Check the pod status after the pod is rejected
+			var condition = func(oldPod *v1.Pod, newPod *v1.Pod) (bool, error) {
+				switch newPod.Status.Phase {
+				case v1.PodSucceeded:
+					return true, errors.New("pod succeeded unexpectedly")
+				case v1.PodFailed:
+					if strings.HasPrefix(newPod.Status.Reason, "OutOf") {
+						expectedStatus := oldPod.Status
+						// overwriting all fields that we expect are overridden by kubelet.
+						// All other fields must stay the same as before kubelet touched them
+						expectedStatus.Phase = newPod.Status.Phase
+						expectedStatus.Reason = newPod.Status.Reason
+						expectedStatus.Message = newPod.Status.Message
+						expectedStatus.StartTime = newPod.Status.StartTime
+						if !reflect.DeepEqual(expectedStatus, newPod.Status) {
+							return true, fmt.Errorf("unexpected status change: \nExpected:\n%s\n But got:\n%v", format.Object(expectedStatus, 1), format.Object(newPod.Status, 1))
+						}
+						return true, nil
+					} else {
+						return true, fmt.Errorf("pod failed with reason %s", newPod.Status.Reason)
+					}
+				}
+				return false, nil
+			}
+			err = e2epod.WaitForPodChange(ctx, f.ClientSet, pod.Namespace, pod.Name, f.Timeouts.PodStartShort, condition)
+			framework.ExpectNoError(err)
 		})
 	})
 })
