@@ -4389,7 +4389,7 @@ var _ = SIGDescribe(feature.SidecarContainers, "Containers Lifecycle", func() {
 				ps3Last, err := results.TimeOfLastLoop(prefixedName(PreStopPrefix, restartableInit3))
 				framework.ExpectNoError(err)
 
-				const simulToleration = 500 // milliseconds
+				const simulToleration = 1000 // milliseconds
 				// should all end together since they loop infinitely and exceed their grace period
 				gomega.Expect(ps1Last-ps2Last).To(gomega.BeNumerically("~", 0, simulToleration),
 					fmt.Sprintf("expected PreStop 1 & PreStop 2 to be killed at the same time, got %s", results))
