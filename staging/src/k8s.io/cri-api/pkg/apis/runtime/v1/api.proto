@@ -649,6 +649,9 @@ message PodSandboxFilter {
 message ListPodSandboxRequest {
     // PodSandboxFilter to filter a list of PodSandboxes.
     PodSandboxFilter filter = 1;
+    // pagination
+    int32 page_size = 2;
+    string page_token = 3;
 }
 
 
@@ -676,6 +679,8 @@ message PodSandbox {
 message ListPodSandboxResponse {
     // List of PodSandboxes.
     repeated PodSandbox items = 1;
+    // pagination
+    string next_page_token = 2;
 }
 
 message PodSandboxStatsRequest {

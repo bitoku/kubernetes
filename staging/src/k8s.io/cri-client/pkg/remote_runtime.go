@@ -322,17 +322,32 @@ func (r *remoteRuntimeService) ListPodSandbox(ctx context.Context, filter *runti
 }
 
 func (r *remoteRuntimeService) listPodSandboxV1(ctx context.Context, filter *runtimeapi.PodSandboxFilter) ([]*runtimeapi.PodSandbox, error) {
-	resp, err := r.runtimeClient.ListPodSandbox(ctx, &runtimeapi.ListPodSandboxRequest{
-		Filter: filter,
-	})
-	if err != nil {
-		r.logErr(err, "ListPodSandbox with filter from runtime service failed", "filter", filter)
-		return nil, err
+	var pageToken string
+	var items []*runtimeapi.PodSandbox
+
+	// pagination
+	for {
+		resp, err := r.runtimeClient.ListPodSandbox(ctx, &runtimeapi.ListPodSandboxRequest{
+			Filter:    filter,
+			PageSize:  10,
+			PageToken: pageToken,
+		})
+		if err != nil {
+			r.logErr(err, "ListPodSandbox with filter from runtime service failed", "filter", filter)
+			return nil, err
+		}
+		items = append(items, resp.Items...)
+
+		// It might be the last page or runtime doesn't support pagination.
+		pageToken = resp.GetNextPageToken()
+		if pageToken == "" {
+			break
+		}
 	}
 
-	r.log(10, "[RemoteRuntimeService] ListPodSandbox Response", "filter", filter, "items", resp.Items)
+	r.log(10, "[RemoteRuntimeService] ListPodSandbox Response", "filter", filter, "items", items)
 
-	return resp.Items, nil
+	return items, nil
 }
 
 // CreateContainer creates a new container in the specified PodSandbox.
