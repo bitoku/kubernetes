@@ -63,6 +63,7 @@ const (
 	RuntimeService_StopContainer_FullMethodName             = "/runtime.v1.RuntimeService/StopContainer"
 	RuntimeService_RemoveContainer_FullMethodName           = "/runtime.v1.RuntimeService/RemoveContainer"
 	RuntimeService_ListContainers_FullMethodName            = "/runtime.v1.RuntimeService/ListContainers"
+	RuntimeService_ListContainerStream_FullMethodName       = "/runtime.v1.RuntimeService/ListContainerStream"
 	RuntimeService_ContainerStatus_FullMethodName           = "/runtime.v1.RuntimeService/ContainerStatus"
 	RuntimeService_UpdateContainerResources_FullMethodName  = "/runtime.v1.RuntimeService/UpdateContainerResources"
 	RuntimeService_ReopenContainerLog_FullMethodName        = "/runtime.v1.RuntimeService/ReopenContainerLog"
@@ -132,6 +133,8 @@ type RuntimeServiceClient interface {
 	RemoveContainer(ctx context.Context, in *RemoveContainerRequest, opts ...grpc.CallOption) (*RemoveContainerResponse, error)
 	// ListContainers lists all containers by filters.
 	ListContainers(ctx context.Context, in *ListContainersRequest, opts ...grpc.CallOption) (*ListContainersResponse, error)
+	// ListContainerStream lists all containers by filters, streaming results one by one.
+	ListContainerStream(ctx context.Context, in *ListContainerStreamRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[ListContainerStreamResponse], error)
 	// ContainerStatus returns status of the container. If the container is not
 	// present, returns an error.
 	ContainerStatus(ctx context.Context, in *ContainerStatusRequest, opts ...grpc.CallOption) (*ContainerStatusResponse, error)
@@ -312,6 +315,25 @@ func (c *runtimeServiceClient) ListContainers(ctx context.Context, in *ListConta
 	return out, nil
 }
 
+func (c *runtimeServiceClient) ListContainerStream(ctx context.Context, in *ListContainerStreamRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[ListContainerStreamResponse], error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &RuntimeService_ServiceDesc.Streams[0], RuntimeService_ListContainerStream_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[ListContainerStreamRequest, ListContainerStreamResponse]{ClientStream: stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type RuntimeService_ListContainerStreamClient = grpc.ServerStreamingClient[ListContainerStreamResponse]
+
 func (c *runtimeServiceClient) ContainerStatus(ctx context.Context, in *ContainerStatusRequest, opts ...grpc.CallOption) (*ContainerStatusResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(ContainerStatusResponse)
@@ -454,7 +476,7 @@ func (c *runtimeServiceClient) CheckpointContainer(ctx context.Context, in *Chec
 
 func (c *runtimeServiceClient) GetContainerEvents(ctx context.Context, in *GetEventsRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[ContainerEventResponse], error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	stream, err := c.cc.NewStream(ctx, &RuntimeService_ServiceDesc.Streams[0], RuntimeService_GetContainerEvents_FullMethodName, cOpts...)
+	stream, err := c.cc.NewStream(ctx, &RuntimeService_ServiceDesc.Streams[1], RuntimeService_GetContainerEvents_FullMethodName, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -559,6 +581,8 @@ type RuntimeServiceServer interface {
 	RemoveContainer(context.Context, *RemoveContainerRequest) (*RemoveContainerResponse, error)
 	// ListContainers lists all containers by filters.
 	ListContainers(context.Context, *ListContainersRequest) (*ListContainersResponse, error)
+	// ListContainerStream lists all containers by filters, streaming results one by one.
+	ListContainerStream(*ListContainerStreamRequest, grpc.ServerStreamingServer[ListContainerStreamResponse]) error
 	// ContainerStatus returns status of the container. If the container is not
 	// present, returns an error.
 	ContainerStatus(context.Context, *ContainerStatusRequest) (*ContainerStatusResponse, error)
@@ -661,6 +685,9 @@ func (UnimplementedRuntimeServiceServer) RemoveContainer(context.Context, *Remov
 }
 func (UnimplementedRuntimeServiceServer) ListContainers(context.Context, *ListContainersRequest) (*ListContainersResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ListContainers not implemented")
+}
+func (UnimplementedRuntimeServiceServer) ListContainerStream(*ListContainerStreamRequest, grpc.ServerStreamingServer[ListContainerStreamResponse]) error {
+	return status.Errorf(codes.Unimplemented, "method ListContainerStream not implemented")
 }
 func (UnimplementedRuntimeServiceServer) ContainerStatus(context.Context, *ContainerStatusRequest) (*ContainerStatusResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ContainerStatus not implemented")
@@ -937,6 +964,17 @@ func _RuntimeService_ListContainers_Handler(srv interface{}, ctx context.Context
 	}
 	return interceptor(ctx, in, info, handler)
 }
+
+func _RuntimeService_ListContainerStream_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(ListContainerStreamRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(RuntimeServiceServer).ListContainerStream(m, &grpc.GenericServerStream[ListContainerStreamRequest, ListContainerStreamResponse]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type RuntimeService_ListContainerStreamServer = grpc.ServerStreamingServer[ListContainerStreamResponse]
 
 func _RuntimeService_ContainerStatus_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(ContainerStatusRequest)
@@ -1398,6 +1436,11 @@ var RuntimeService_ServiceDesc = grpc.ServiceDesc{
 		},
 	},
 	Streams: []grpc.StreamDesc{
+		{
+			StreamName:    "ListContainerStream",
+			Handler:       _RuntimeService_ListContainerStream_Handler,
+			ServerStreams: true,
+		},
 		{
 			StreamName:    "GetContainerEvents",
 			Handler:       _RuntimeService_GetContainerEvents_Handler,

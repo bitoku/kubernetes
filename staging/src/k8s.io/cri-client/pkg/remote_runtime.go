@@ -431,7 +431,7 @@ func (r *remoteRuntimeService) ListContainers(ctx context.Context, filter *runti
 	ctx, cancel := context.WithTimeout(ctx, r.timeout)
 	defer cancel()
 
-	return r.listContainersV1(ctx, filter)
+	return r.listContainerStream(ctx, filter)
 }
 
 func (r *remoteRuntimeService) listContainersV1(ctx context.Context, filter *runtimeapi.ContainerFilter) ([]*runtimeapi.Container, error) {
@@ -445,6 +445,37 @@ func (r *remoteRuntimeService) listContainersV1(ctx context.Context, filter *run
 	r.log(10, "[RemoteRuntimeService] ListContainers Response", "filter", filter, "containers", resp.Containers)
 
 	return resp.Containers, nil
+}
+
+// ListContainerStream lists all containers by filters, streaming results one by one.
+func (r *remoteRuntimeService) listContainerStream(ctx context.Context, filter *runtimeapi.ContainerFilter) ([]*runtimeapi.Container, error) {
+	r.log(10, "[RemoteRuntimeService] ListContainerStream", "filter", filter, "timeout", r.timeout)
+	ctx, cancel := context.WithTimeout(ctx, r.timeout)
+	defer cancel()
+
+	streamClient, err := r.runtimeClient.ListContainerStream(ctx, &runtimeapi.ListContainerStreamRequest{Filter: filter})
+	if err != nil {
+		r.logErr(err, "ListContainerStream with filter from runtime service failed", "filter", filter)
+		return nil, err
+	}
+
+	var containers []*runtimeapi.Container
+	for {
+		resp, err := streamClient.Recv()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			r.logErr(err, "ListContainerStream recv failed")
+			return nil, err
+		}
+		if resp != nil && resp.Container != nil {
+			containers = append(containers, resp.Container)
+		}
+	}
+
+	r.log(10, "[RemoteRuntimeService] ListContainerStream Response", "filter", filter, "containers", containers)
+	return containers, nil
 }
 
 // ContainerStatus returns the container status.

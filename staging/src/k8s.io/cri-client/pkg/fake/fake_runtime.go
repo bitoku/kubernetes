@@ -339,6 +339,11 @@ func (f *RemoteRuntime) GetContainerEvents(req *kubeapi.GetEventsRequest, ces ku
 	return nil
 }
 
+// ListContainerStream lists all containers by filters, streaming results one by one.
+func (f *RemoteRuntime) ListContainerStream(req *kubeapi.ListContainerStreamRequest, stream kubeapi.RuntimeService_ListContainerStreamServer) error {
+	return nil
+}
+
 // ListMetricDescriptors gets the descriptors for the metrics that will be returned in ListPodSandboxMetrics.
 func (f *RemoteRuntime) ListMetricDescriptors(ctx context.Context, req *kubeapi.ListMetricDescriptorsRequest) (*kubeapi.ListMetricDescriptorsResponse, error) {
 	descs, err := f.RuntimeService.ListMetricDescriptors(ctx)

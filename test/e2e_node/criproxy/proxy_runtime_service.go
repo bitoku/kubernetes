@@ -495,6 +495,11 @@ func (p *RemoteRuntime) GetContainerEvents(req *runtimeapi.GetEventsRequest, ces
 	return nil
 }
 
+// ListContainerStream lists all containers by filters, streaming results one by one.
+func (p *RemoteRuntime) ListContainerStream(req *runtimeapi.ListContainerStreamRequest, stream runtimeapi.RuntimeService_ListContainerStreamServer) error {
+	return status.Errorf(codes.Unimplemented, "method ListContainerStream not implemented")
+}
+
 // ListMetricDescriptors gets the descriptors for the metrics that will be returned in ListPodSandboxMetrics.
 func (p *RemoteRuntime) ListMetricDescriptors(ctx context.Context, req *runtimeapi.ListMetricDescriptorsRequest) (*runtimeapi.ListMetricDescriptorsResponse, error) {
 	if err := p.runInjectors(ListMetricDescriptors); err != nil {
