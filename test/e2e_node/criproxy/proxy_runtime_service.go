@@ -578,7 +578,7 @@ func (p *RemoteRuntime) StreamContainers(req *runtimeapi.StreamContainersRequest
 		if err := p.runInjectors(StreamContainersSend); err != nil {
 			return err
 		}
-		if err := stream.Send(&runtimeapi.StreamContainersResponse{Container: item}); err != nil {
+		if err := stream.Send(&runtimeapi.StreamContainersResponse{Containers: []*runtimeapi.Container{item}}); err != nil {
 			return err
 		}
 	}

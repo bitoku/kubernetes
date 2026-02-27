@@ -1465,8 +1465,8 @@ message StreamContainersRequest {
 }
 
 message StreamContainersResponse {
-    // A single Container.
-    Container container = 1;
+    // List of containers.
+    repeated Container containers = 1;
 }
 
 message ContainerStatusRequest {

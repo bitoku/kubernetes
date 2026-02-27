@@ -395,7 +395,7 @@ func (f *RemoteRuntime) StreamContainers(req *kubeapi.StreamContainersRequest, s
 		return err
 	}
 	for _, item := range items {
-		if err := stream.Send(&kubeapi.StreamContainersResponse{Container: item}); err != nil {
+		if err := stream.Send(&kubeapi.StreamContainersResponse{Containers: []*kubeapi.Container{item}}); err != nil {
 			return err
 		}
 	}

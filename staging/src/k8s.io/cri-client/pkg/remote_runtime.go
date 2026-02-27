@@ -525,8 +525,8 @@ func (r *remoteRuntimeService) streamContainersV1(ctx context.Context, filter *r
 			r.logErr(err, "StreamContainers recv failed", "filter", filter, "itemsReceived", len(containers))
 			return nil, err
 		}
-		if resp.Container != nil {
-			containers = append(containers, resp.Container)
+		if len(resp.Containers) > 0 {
+			containers = append(containers, resp.Containers...)
 		}
 	}
 
