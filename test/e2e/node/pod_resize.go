@@ -502,6 +502,7 @@ func doPodResizeSchedulerTests(f *framework.Framework) {
 
 		ginkgo.By("Find node CPU resources available for allocation!")
 		node := nodes.Items[0]
+		framework.ExpectNoError(waitForLingeringPods(ctx, f, node.Name), "lingering pods from previous tests should be gone from node %s", node.Name)
 		nodeAllocatableCPU, nodeAvailableCPU, err := e2enode.GetNodeAllocatableAndAvailableQuantities(ctx, f.ClientSet, &node, v1.ResourceCPU)
 		framework.ExpectNoError(err, "failed to get CPU resources available for allocation")
 		framework.Logf("Node '%s': NodeAllocatable MilliCPUs = %dm. MilliCPUs currently available to allocate = %dm.",
@@ -712,6 +713,7 @@ func doPodResizeRetryDeferredTests(f *framework.Framework) {
 
 		ginkgo.By("Find node CPU resources available for allocation!")
 		node := nodes.Items[0]
+		framework.ExpectNoError(waitForLingeringPods(ctx, f, node.Name), "lingering pods from previous tests should be gone from node %s", node.Name)
 		nodeAllocatableCPU, nodeAvailableCPU, err := e2enode.GetNodeAllocatableAndAvailableQuantities(ctx, f.ClientSet, &node, v1.ResourceCPU)
 		framework.ExpectNoError(err, "failed to get CPU resources available for allocation")
 		framework.Logf("Node '%s': NodeAllocatable MilliCPUs = %dm. MilliCPUs currently available to allocate = %dm.",
@@ -834,6 +836,7 @@ func doPodResizeRetryDeferredTests(f *framework.Framework) {
 
 		ginkgo.By("Find node CPU and memory resources available for allocation!")
 		node := nodes.Items[0]
+		framework.ExpectNoError(waitForLingeringPods(ctx, f, node.Name), "lingering pods from previous tests should be gone from node %s", node.Name)
 
 		nodeAllocatableCPU, nodeAvailableCPU, err := e2enode.GetNodeAllocatableAndAvailableQuantities(ctx, f.ClientSet, &node, v1.ResourceCPU)
 		framework.ExpectNoError(err, "failed to get CPU resources available for allocation")
@@ -1061,6 +1064,7 @@ func doPodResizeRetryDeferredTests(f *framework.Framework) {
 
 		ginkgo.By("Find node CPU and memory resources available for allocation!")
 		node := nodes.Items[0]
+		framework.ExpectNoError(waitForLingeringPods(ctx, f, node.Name), "lingering pods from previous tests should be gone from node %s", node.Name)
 
 		nodeAllocatableCPU, initNodeAvailableCPU, err := e2enode.GetNodeAllocatableAndAvailableQuantities(ctx, f.ClientSet, &node, v1.ResourceCPU)
 		framework.ExpectNoError(err, "failed to get CPU resources available for allocation")
@@ -1240,6 +1244,40 @@ func waitForResourceQuota(ctx context.Context, c clientset.Interface, ns, quotaN
 		}
 		return quota.Status.Used, nil
 	})).WithTimeout(framework.PollShortTimeout).ShouldNot(gomega.BeEmpty())
+}
+
+func waitForLingeringPods(ctx context.Context, f *framework.Framework, nodeName string) error {
+	return framework.Gomega().Eventually(ctx, framework.HandleRetry(func(ctx context.Context) ([]string, error) {
+		nsList, err := f.ClientSet.CoreV1().Namespaces().List(ctx, metav1.ListOptions{
+			LabelSelector: "e2e-framework",
+		})
+		if err != nil {
+			return nil, err
+		}
+		previousTestNS := make(map[string]bool)
+		for _, ns := range nsList.Items {
+			if ns.Name != f.Namespace.Name {
+				previousTestNS[ns.Name] = true
+			}
+		}
+		if len(previousTestNS) == 0 {
+			return nil, nil
+		}
+
+		selector := fmt.Sprintf("spec.nodeName=%s,status.phase!=%v,status.phase!=%v", nodeName, v1.PodSucceeded, v1.PodFailed)
+		podList, err := f.ClientSet.CoreV1().Pods(metav1.NamespaceAll).List(ctx, metav1.ListOptions{FieldSelector: selector})
+		if err != nil {
+			return nil, err
+		}
+
+		var lingering []string
+		for _, pod := range podList.Items {
+			if previousTestNS[pod.Namespace] {
+				lingering = append(lingering, fmt.Sprintf("%s/%s", pod.Namespace, pod.Name))
+			}
+		}
+		return lingering, nil
+	})).WithTimeout(f.Timeouts.PodDelete).Should(gomega.BeEmpty())
 }
 
 func waitForPodDeferred(ctx context.Context, f *framework.Framework, testPod *v1.Pod) {
